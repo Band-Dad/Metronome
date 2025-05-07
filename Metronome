@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analog-Style Metronome</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #ddd;
+      font-family: 'Times New Roman', serif;
+    }
+    #metronome {
+      position: relative;
+      cursor: pointer;
+    }
+    .body {
+      position: relative;
+      width: 200px;
+      height: 400px;
+      background: #111;
+      clip-path: polygon(10% 0, 90% 0, 100% 100%, 0% 100%);
+      border: 8px solid #754c24;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.7);
+      margin-bottom: 20px;
+    }
+    .body::before {
+      content: '';
+      position: absolute;
+      top: -30px;
+      left: 0;
+      width: 100%;
+      height: 30px;
+      background: #c49a6c;
+      clip-path: polygon(0 100%, 50% 0, 100% 100%);
+      border-left: 8px solid #754c24;
+      border-right: 8px solid #754c24;
+    }
+    .body::after {
+      content: '';
+      position: absolute;
+      bottom: -20px;
+      left: 0;
+      width: 100%;
+      height: 20px;
+      background: #c49a6c;
+      border-left: 8px solid #754c24;
+      border-right: 8px solid #754c24;
+    }
+    .scale {
+      position: absolute;
+      top: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 300px;
+      background: url('scale.png') no-repeat center;
+      background-size: contain;
+      pointer-events: none;
+    }
+    .pendulum {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform-origin: top center;
+    }
+    .rod {
+      width: 4px;
+      height: 330px;
+      background: linear-gradient(to bottom, #ccc, #888);
+      margin: 0 auto;
+    }
+    .weight {
+      position: absolute;
+      top: 180px;
+      left: -13px;
+      width: 30px;
+      height: 20px;
+      background: #bbb;
+      border: 2px solid #888;
+      border-radius: 4px;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f5e1c0;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .controls button, .controls select {
+      font-family: serif;
+      background: #fff;
+      border: 1px solid #888;
+      border-radius: 4px;
+      padding: 5px 8px;
+      cursor: pointer;
+    }
+    #bpm-display {
+      min-width: 60px;
+      text-align: center;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="metronome">
+    <div class="body">
+      <div class="scale"></div>
+      <div class="pendulum">
+        <div class="rod"></div>
+        <div class="weight"></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="start-stop">Start</button>
+      <button id="bpm-down">–</button>
+      <span id="bpm-display">120 BPM</span>
+      <button id="bpm-up">+</button>
+      <label for="time-signature">Time:</label>
+      <select id="time-signature">
+        <option value="2">2/4</option>
+        <option value="3">3/4</option>
+        <option value="4" selected>4/4</option>
+      </select>
+    </div>
+  </div>
+  <script>
+    const metronomeEl = document.getElementById('metronome');
+    const pendulum = document.querySelector('.pendulum');
+    const weight = document.querySelector('.weight');
+    const bpmDisplay = document.getElementById('bpm-display');
+    const bpmUp = document.getElementById('bpm-up');
+    const bpmDown = document.getElementById('bpm-down');
+    const timeSigSelect = document.getElementById('time-signature');
+    const startStopBtn = document.getElementById('start-stop');
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playClick() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    let bpm = 120;
+    let timeSignature = 4;
+    const minBpm = 20;
+    const maxBpm = 240;
+    const amplitude = Math.PI / 6;
+    let beatInterval = 60 / bpm;
+    let extremeInterval = beatInterval / 2;
+    let lastTimestamp = null;
+    let beatTimer = 0;
+    let extremeTimer = 0;
+    let isRunning = false;
+    let animationId;
+
+    function updateBpmDisplay() {
+      bpmDisplay.textContent = `${bpm} BPM`;
+      beatInterval = 60 / bpm;
+      extremeInterval = beatInterval / 2;
+    }
+
+    bpmUp.addEventListener('click', () => { if (bpm < maxBpm) bpm++; updateBpmDisplay(); });
+    bpmDown.addEventListener('click', () => { if (bpm > minBpm) bpm--; updateBpmDisplay(); });
+    timeSigSelect.addEventListener('change', () => { timeSignature = +timeSigSelect.value; });
+
+    function onBeat() {
+      // Beat logic (no visual color change)
+    }
+
+    function animate(ts) {
+      if (!lastTimestamp) lastTimestamp = ts;
+      const delta = (ts - lastTimestamp) / 1000;
+      lastTimestamp = ts;
+      const t = ts / 1000;
+      pendulum.style.transform = `rotate(${amplitude * Math.cos((2 * Math.PI * t) / (60 / bpm))}rad)`;
+      beatTimer += delta;
+      if (beatTimer >= beatInterval) {
+        beatTimer -= beatInterval;
+        onBeat();
+      }
+      extremeTimer += delta;
+      if (extremeTimer >= extremeInterval) {
+        extremeTimer -= extremeInterval;
+        playClick();
+      }
+      if (isRunning) animationId = requestAnimationFrame(animate);
+    }
+
+    function toggleMetronome() {
+      if (!isRunning) {
+        isRunning = true;
+        startStopBtn.textContent = 'Stop';
+        lastTimestamp = null;
+        beatTimer = extremeTimer = 0;
+        animationId = requestAnimationFrame(animate);
+      } else {
+        isRunning = false;
+        startStopBtn.textContent = 'Start';
+        cancelAnimationFrame(animationId);
+        pendulum.style.transform = 'rotate(0rad)';
+      }
+    }
+
+    startStopBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMetronome(); });
+    metronomeEl.addEventListener('click', () => { toggleMetronome(); });
+
+    // Initial display and resting position
+    updateBpmDisplay();
+    pendulum.style.transform = 'rotate(0rad)';
+  </script>
+</body>
+</html>
